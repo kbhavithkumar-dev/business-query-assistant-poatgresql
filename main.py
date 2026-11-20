@@ -7,20 +7,39 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StringConstraints
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 import psycopg
 from typing import Annotated
 
-from assistant import EXAMPLES, QuestionError, demo_mode, display_value, explain, make_sql, run_query
+from assistant import EXAMPLES, QuestionError, check_database, demo_mode, display_value, explain, make_sql, run_query
 from sql_guard import UnsafeSQL, validate_sql
+from web_security import WebSecurity, web_settings
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
-app = FastAPI(title="Business Data Query Assistant")
+hosts, username, password = web_settings()
+app = FastAPI(title="Business Data Query Assistant", version="2.0.0")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
+app.add_middleware(WebSecurity, username=username, password=password)
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
 class Question(BaseModel):
     question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+@app.get("/healthz")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readiness():
+    try:
+        check_database()
+    except psycopg.Error as exc:
+        raise HTTPException(503, "The PostgreSQL reporting view is unavailable.") from exc
+    return {"status": "ready"}
 
 
 @app.get("/")
@@ -58,4 +77,7 @@ def ask(body: Question):
         raise HTTPException(422, "PostgreSQL could not run this query. Try a simpler sales question.") from exc
 
     values = [[display_value(value) for value in row] for row in rows]
-    return {"sql": sql, "columns": columns, "rows": values, "summary": explain(columns, values, truncated)}
+    return {
+        "sql": sql, "columns": columns, "rows": values, "summary": explain(columns, values, truncated),
+        "truncated": truncated, "mode": "demo" if demo_mode() else "gemini",
+    }

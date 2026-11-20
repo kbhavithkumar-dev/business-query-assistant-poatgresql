@@ -1,19 +1,27 @@
 /* Layout and colors are shared by the question form and result card. */
 :root {
   color: #122c30;
-  background: #eef4f2;
+  background: linear-gradient(165deg, #e4f1ee, #f4f8f7 60%) fixed;
   font-family: system-ui, sans-serif;
   line-height: 1.5;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { width: min(880px, calc(100% - 32px)); margin: 48px auto; }
+main, .brand { width: min(1100px, calc(100% - 36px)); margin-inline: auto; }
+main { margin-top: 42px; margin-bottom: 45px; }
+.topbar { background: #113c34; color: white; padding-block: 14px; }
+.brand { display: block; font-weight: 750; }
+.workspace { display: grid; grid-template-columns: minmax(0, 275px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.work-area { min-width: 0; }
+.samples button { display: block; width: 100%; text-align: left; }
+.result-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+#row-count { color: #1c5c4c; background: #e5f3ee; padding: 3px 9px; border-radius: 99px; font-weight: 650; font-size: .8rem; }
 header { margin-bottom: 24px; }
 header p { margin: 4px 0; color: #3d5e60; }
 .section-name { font-weight: 700; font-size: .86rem; }
 h1 { font-size: clamp(2rem, 6vw, 3.1rem); line-height: 1.08; letter-spacing: -.035em; margin: 6px 0 12px; }
 h2 { margin: 0; font-size: 1.25rem; }
-.card { border: 1px solid #cadad6; border-radius: 15px; padding: 20px; background: white; margin: 0 0 16px; }
+.card { border: 1px solid #cadad6; border-radius: 15px; padding: 20px; background: white; margin: 0 0 16px; box-shadow: 0 4px 14px #153d3610; }
 label { display: block; font-weight: 700; }
 textarea, button { font: inherit; }
 textarea { display: block; width: 100%; resize: vertical; padding: 10px; margin: 6px 0 10px; border: 1px solid #8ba9a2; border-radius: 8px; color: inherit; }
@@ -23,8 +31,8 @@ button:disabled { opacity: .6; cursor: wait; }
 :focus-visible { outline: 3px solid #20846d; outline-offset: 2px; }
 .primary { background: #12614d; color: white; font-weight: 700; padding: 8px 13px; }
 .primary:hover { background: #0d4839; }
-#examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-#mode { color: #3d5e60; margin: 0 0 10px; font-size: .88rem; }
+#examples { display: grid; gap: 7px; margin-top: 12px; }
+#mode { color: #3d5e60; margin: 12px 0 0; font-size: .85rem; }
 #status { margin-bottom: 0; }
 #status:empty { display: none; }
 #status.error { color: #a02835; }
@@ -35,7 +43,8 @@ th { background: #e6f2ed; }
 details { margin-top: 12px; }
 summary { cursor: pointer; font-weight: 650; }
 pre { padding: 12px; background: #f2f6f4; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 520px) {
+@media (max-width: 700px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); gap: 0; }
   main { margin-top: 28px; }
   .card { padding: 14px; }
 }

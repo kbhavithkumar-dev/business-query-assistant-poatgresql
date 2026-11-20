@@ -24,6 +24,8 @@ async function loadExamples() {
 
 function paintResult(data) {
   document.getElementById("summary").textContent = data.summary;
+  const count = data.rows.length;
+  document.getElementById("row-count").textContent = `${count}${data.truncated ? "+" : ""} ${count === 1 ? "row" : "rows"}`;
   document.getElementById("sql").textContent = data.sql;
   const columns = document.getElementById("columns");
   const rows = document.getElementById("rows");
@@ -57,7 +59,7 @@ form.addEventListener("submit", async (event) => {
   try {
     const response = await fetch("/api/ask", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", "X-Business-Request": "1"},
       body: JSON.stringify({question: question.value.trim()}),
     });
     const data = await response.json();

@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from functools import lru_cache
 import os
 
 import psycopg
@@ -56,8 +57,6 @@ def make_sql(question):
     if not api_key:
         raise QuestionError("Add GEMINI_API_KEY to .env or turn on DEMO_MODE.")
 
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
     schema_text = "\n".join(f"- {name}: {description}" for name, description in SCHEMA.items())
     instructions = f"""Translate sales questions to a single PostgreSQL SELECT.
 The only available view is reporting.sales. Each row represents one order.
@@ -72,14 +71,7 @@ If the question cannot be answered from this view or needs clarification,
 return UNSUPPORTED. Otherwise return only SQL, without markdown fences."""
 
     # The API receives the question and schema description. Results stay in Python.
-    model = ChatGoogleGenerativeAI(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
-        google_api_key=api_key,
-        vertexai=False,
-        temperature=0,
-        timeout=20,
-        max_retries=0,
-    )
+    model = gemini_model(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"), api_key)
     response = model.invoke([("system", instructions), ("human", question)])
     sql = response.text.strip()
     if not sql or sql.upper() == "UNSUPPORTED":
@@ -87,16 +79,38 @@ return UNSUPPORTED. Otherwise return only SQL, without markdown fences."""
     return sql
 
 
-def run_query(query):
-    # Use the restricted reader account for every request.
-    with psycopg.connect(
+@lru_cache(maxsize=1)
+def gemini_model(model_name, api_key):
+    # Reuse the Gemini client so requests can reuse network connections.
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=api_key,
+        vertexai=False,
+        temperature=0,
+        timeout=20,
+        max_retries=0,
+    )
+
+
+def connect_to_database():
+    url = os.getenv("BUSINESS_DATABASE_URL", "").strip()
+    if url:
+        return psycopg.connect(url, connect_timeout=5)
+    return psycopg.connect(
         host=os.getenv("DB_HOST", "127.0.0.1"),
         port=os.getenv("DB_PORT", "5433"),
         dbname="business_demo",
         user="report_reader",
         password=os.getenv("REPORT_READER_PASSWORD", ""),
         connect_timeout=5,
-    ) as connection:
+    )
+
+
+def run_query(query):
+    # Use the restricted reader account for every request.
+    with connect_to_database() as connection:
         connection.read_only = True
         with connection.cursor() as cursor:
             # Set these on the transaction, so they cannot leak into future requests.
@@ -108,6 +122,12 @@ def run_query(query):
             rows = cursor.fetchmany(MAX_ROWS + 1)
     # Fetch one extra row to know whether the result is truncated.
     return columns, rows[:MAX_ROWS], len(rows) > MAX_ROWS
+
+
+def check_database():
+    # Readiness checks the same view and role as a real question.
+    columns = ", ".join(SCHEMA)
+    run_query(f"SELECT {columns} FROM reporting.sales LIMIT 0")
 
 
 def display_value(value):

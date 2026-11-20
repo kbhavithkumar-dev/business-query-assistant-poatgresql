@@ -16,7 +16,9 @@ ALLOWED_NODES = {
     "BoolExpr", "NullTest", "SortBy", "FuncCall",
 }
 ALLOWED_FUNCTIONS = {"count", "sum", "avg", "min", "max", "round", "date_trunc"}
-ALLOWED_OPERATORS = {"+", "-", "*", "/", "%", "=", "<>", "!=", "<", "<=", ">", ">=", "~~", "!~~", "~~*", "!~~*"}
+ALLOWED_OPERATORS = {"+", "-", "*", "/", "%", "=", "<>", "!=", "<", "<=", ">", ">=", "~~", "!~~", "~~*", "!~~*",
+    "BETWEEN", "NOT BETWEEN", "BETWEEN SYMMETRIC", "NOT BETWEEN SYMMETRIC",
+}
 
 
 class UnsafeSQL(ValueError):

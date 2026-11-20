@@ -3,7 +3,7 @@
 from decimal import Decimal
 import os
 from unittest import TestCase, skipUnless
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 import psycopg
@@ -45,7 +45,7 @@ class APITests(TestCase):
     def test_example_flows_through_validator_to_executor(self):
         with patch.dict(os.environ, {"DEMO_MODE": "true"}), patch(
             "main.run_query", return_value=(["total_revenue_inr"], [(Decimal("102700.00"),)], False),
-        ) as executor, TestClient(app) as client:
+        ) as executor, TestClient(app, base_url="http://localhost", headers={"X-Business-Request": "1"}) as client:
             self.assertEqual(client.get("/").status_code, 200)
             self.assertTrue(client.get("/api/examples").json()["demo_mode"])
             response = client.post("/api/ask", json={"question": "What is the total revenue?"})
@@ -54,10 +54,34 @@ class APITests(TestCase):
             self.assertIn("102700.00", response.json()["summary"])
             self.assertTrue(executor.call_args.args[0].endswith("LIMIT 101"))
 
+    def test_ai_mode_passes_schema_to_gemini_and_uses_validated_sql(self):
+        gemini = MagicMock()
+        gemini.invoke.return_value.text = "SELECT count(*) AS orders FROM reporting.sales"
+        with patch.dict(os.environ, {"DEMO_MODE": "false", "GEMINI_API_KEY": "test-key"}), patch(
+            "assistant.gemini_model", return_value=gemini,
+        ), patch("main.run_query", return_value=(["orders"], [(12,)], False)) as database:
+            with TestClient(app, base_url="http://localhost", headers={"X-Business-Request": "1"}) as client:
+                response = client.post("/api/ask", json={"question": "How many orders?"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["mode"], "gemini")
+        self.assertEqual(response.json()["rows"], [[12]])
+        messages = gemini.invoke.call_args.args[0]
+        self.assertIn("reporting.sales", messages[0][1])
+        self.assertTrue(database.call_args.args[0].endswith("LIMIT 101"))
+
+    def test_browser_request_protections(self):
+        with TestClient(app, base_url="http://localhost") as client:
+            self.assertEqual(client.get("/healthz").json(), {"status": "ok"})
+            self.assertEqual(client.get("/", headers={"Host": "example.test"}).status_code, 400)
+            self.assertEqual(client.post("/api/ask").status_code, 403)
+            self.assertEqual(client.post(
+                "/api/ask", content=b"x" * 8193, headers={"X-Business-Request": "1"},
+            ).status_code, 413)
+
     def test_rejected_sql_never_reaches_postgres(self):
         with patch("main.make_sql", return_value="DELETE FROM reporting.sales"), patch(
             "main.run_query",
-        ) as executor, TestClient(app) as client:
+        ) as executor, TestClient(app, base_url="http://localhost", headers={"X-Business-Request": "1"}) as client:
             self.assertEqual(client.post("/api/ask", json={"question": "Clear the sales."}).status_code, 422)
             executor.assert_not_called()
 
@@ -74,7 +98,8 @@ class PostgreSQLTests(TestCase):
             "Which product sold the most units?": [["Mouse", 14]],
             "How many orders were placed in February 2025?": [[4]],
         }
-        with patch.dict(os.environ, {"DEMO_MODE": "true"}), TestClient(app) as client:
+        with patch.dict(os.environ, {"DEMO_MODE": "true"}), TestClient(app, base_url="http://localhost", headers={"X-Business-Request": "1"}) as client:
+            self.assertEqual(client.get("/readyz").json(), {"status": "ready"})
             for question, rows in expected.items():
                 with self.subTest(question=question):
                     response = client.post("/api/ask", json={"question": question})
